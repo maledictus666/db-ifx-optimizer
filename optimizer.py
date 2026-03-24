@@ -165,6 +165,18 @@ def main():
         print("Asegúrate de tener instaladas las dependencias: pip install -r requirements.txt")
         sys.exit(1)
 
+    # Mostrar preview de tablas detectadas antes de llamar a Claude
+    try:
+        from agent.schema_parser import extract_tables_from_query
+        tables = extract_tables_from_query(query)
+        if tables:
+            print(f"{CYAN}{BOLD}━━━ TABLAS DETECTADAS EN EL QUERY ━━━{RESET}")
+            for t in tables:
+                print(f"   {DIM}•{RESET} {t}")
+            print()
+    except Exception:
+        pass  # No interrumpir si el preview falla
+
     print(f"{CYAN}{BOLD}━━━ ANALIZANDO Y OPTIMIZANDO ━━━{RESET}\n")
 
     try:
