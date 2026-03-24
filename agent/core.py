@@ -7,24 +7,48 @@ import anthropic
 from pathlib import Path
 from .prompts import SYSTEM_PROMPT
 
-DEFAULT_SCHEMA_PATH = Path(__file__).parent.parent / "schemas" / "seguros.sql"
+DB_ESQUEMA_DIR = Path(__file__).parent.parent / "db-esquema"
 
 
-def load_schema(schema_path: Path = None) -> str | None:
-    """Carga el esquema SQL desde archivo. Retorna None si no existe."""
-    path = schema_path or DEFAULT_SCHEMA_PATH
-    if path.exists():
-        content = path.read_text(encoding="utf-8")
-        return content
-    return None
+def load_schema(schema_dir: Path = None) -> tuple[str | None, list[str]]:
+    """
+    Carga todos los archivos .sql de la carpeta db-esquema/.
+
+    Returns:
+        (schema_text, archivos_cargados)
+        schema_text es None si no se encontró ningún archivo.
+    """
+    folder = schema_dir or DB_ESQUEMA_DIR
+
+    if not folder.exists():
+        return None, []
+
+    sql_files = sorted(folder.glob("*.sql"))
+    if not sql_files:
+        return None, []
+
+    parts = []
+    loaded = []
+    for sql_file in sql_files:
+        content = sql_file.read_text(encoding="utf-8").strip()
+        if content:
+            parts.append(f"-- === {sql_file.name} ===\n{content}")
+            loaded.append(sql_file.name)
+
+    if not parts:
+        return None, []
+
+    return "\n\n".join(parts), loaded
 
 
-def build_user_message(query: str, schema: str | None) -> str:
+def build_user_message(query: str, schema: str | None, loaded_files: list[str]) -> str:
     """Construye el mensaje de usuario con el query y el esquema."""
     parts = []
 
     if schema:
-        parts.append(f"""## ESQUEMA DE LA BASE DE DATOS
+        files_list = ", ".join(loaded_files)
+        parts.append(f"""## ESQUEMA COMPLETO DE LA BASE DE DATOS
+Archivos cargados desde `db-esquema/`: {files_list}
 
 ```sql
 {schema}
@@ -33,9 +57,9 @@ def build_user_message(query: str, schema: str | None) -> str:
 """)
     else:
         parts.append(
-            "**Nota:** No se encontró el archivo de esquema en `schemas/seguros.sql`. "
+            "**Nota:** No se encontraron archivos .sql en la carpeta `db-esquema/`. "
             "El análisis se realizará basándose únicamente en el query. "
-            "Para un análisis más preciso, coloca tu archivo de esquema en `schemas/seguros.sql`.\n\n"
+            "Para un análisis más preciso, coloca los archivos de esquema en `db-esquema/`.\n\n"
         )
 
     parts.append(f"""## QUERY A OPTIMIZAR
@@ -44,14 +68,16 @@ def build_user_message(query: str, schema: str | None) -> str:
 {query.strip()}
 ```
 
-Analiza este query Informix, identifica todos los problemas de rendimiento y genera la versión optimizada siguiendo el formato de respuesta indicado.""")
+Analiza este query Informix contra el esquema provisto. Identifica todos los problemas de rendimiento \
+(joins sin índices, subconsultas correlacionadas, funciones en columnas indexadas, agregaciones sin filtros, \
+SELECT *, etc.) y genera la versión optimizada siguiendo el formato de respuesta indicado.""")
 
     return "".join(parts)
 
 
 def optimize_query(
     query: str,
-    schema_path: Path = None,
+    schema_dir: Path = None,
     stream_output: bool = True,
 ) -> str:
     """
@@ -59,14 +85,14 @@ def optimize_query(
 
     Args:
         query: El SQL a optimizar.
-        schema_path: Ruta al archivo .sql con el esquema. Por defecto usa schemas/seguros.sql.
+        schema_dir: Carpeta con archivos .sql del esquema. Por defecto usa db-esquema/.
         stream_output: Si True, imprime la respuesta en tiempo real (streaming).
 
     Returns:
         El texto completo de la respuesta del agente.
     """
-    schema = load_schema(schema_path)
-    user_message = build_user_message(query, schema)
+    schema, loaded_files = load_schema(schema_dir)
+    user_message = build_user_message(query, schema, loaded_files)
 
     client = anthropic.Anthropic()
 
@@ -88,14 +114,12 @@ def _optimize_streaming(client: anthropic.Anthropic, user_message: str) -> str:
         messages=[{"role": "user", "content": user_message}],
     ) as stream:
         for event in stream:
-            # Solo imprimir bloques de texto (no los bloques de thinking internos)
             if hasattr(event, "type") and event.type == "content_block_delta":
                 delta = event.delta
                 if hasattr(delta, "type") and delta.type == "text_delta":
                     print(delta.text, end="", flush=True)
                     full_response.append(delta.text)
 
-        # Salto de línea al final
         print()
 
     return "".join(full_response)

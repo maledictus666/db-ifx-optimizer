@@ -41,14 +41,17 @@ export ANTHROPIC_API_KEY="tu-api-key"
 
 ## Configurar el esquema
 
-Coloca tu archivo `seguros.sql` (exportado desde Aqua Data Studio) en la carpeta `schemas/`:
+Coloca tus archivos `.sql` (exportados desde Aqua Data Studio) en la carpeta `db-esquema/`.
+El agente carga **todos** los `.sql` que encuentre ahí automáticamente.
 
 ```
-schemas/
-└── seguros.sql   <- Tus CREATE TABLE e índices aquí
+db-esquema/
+├── polizas.sql        <- CREATE TABLE + índices
+├── siniestros.sql
+└── maestras.sql
 ```
 
-Ver `schemas/README.md` para instrucciones detalladas.
+Ver `db-esquema/README.md` para instrucciones de exportación desde Aqua Data Studio.
 
 ## Uso
 
@@ -76,25 +79,25 @@ python optimizer.py --file mi_query_pesado.sql
 python optimizer.py --file query.sql --output resultado.md
 ```
 
-### Con esquema personalizado
+### Con carpeta de esquema personalizada
 
 ```bash
-python optimizer.py --schema /ruta/otro_esquema.sql --file query.sql
+python optimizer.py --db /ruta/a/mis-esquemas/ --file query.sql
 ```
 
 ## Estructura del proyecto
 
 ```
-agente-db-optimizador-querys/
+db-ifx-optimizer/
 ├── optimizer.py          # CLI principal
 ├── requirements.txt      # Dependencias Python
 ├── agent/
 │   ├── __init__.py
 │   ├── core.py           # Lógica de optimización + llamada a Claude
 │   └── prompts.py        # System prompt con conocimiento Informix
-└── schemas/
-    ├── README.md         # Instrucciones para el esquema
-    └── seguros.sql       # Tu esquema (agregar manualmente)
+└── db-esquema/
+    ├── README.md         # Instrucciones de exportación desde Aqua Data Studio
+    └── *.sql             # Tus archivos de esquema (agregar manualmente)
 ```
 
 ## Ejemplo de salida
